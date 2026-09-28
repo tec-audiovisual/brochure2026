@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TEC Audiovisual · Brochure de Servicios 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b1f36;--bg2:#10294a;--ink:#e8f1fa;--muted:#8fa8c4;--accent:#22d3ee;--ratio:1.7828;
+ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#dfe7ef;--bg2:#eef3f8;--ink:#0f2a47;--muted:#51677f;--accent:#0891b2}}
+:root[data-theme="light"]{--bg:#dfe7ef;--bg2:#eef3f8;--ink:#0f2a47;--muted:#51677f;--accent:#0891b2}
+:root[data-theme="dark"]{--bg:#0b1f36;--bg2:#10294a;--ink:#e8f1fa;--muted:#8fa8c4;--accent:#22d3ee}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 40%,var(--bg2),var(--bg) 70%);background-color:var(--bg);color:var(--ink);
+ font-family:Poppins,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;overflow:hidden;user-select:none}
+.stage{perspective:2600px;width:min(92vw,calc((100dvh - 120px) * var(--ratio)));max-width:1200px}
+.book{position:relative;width:100%;aspect-ratio:var(--ratio);transform-style:preserve-3d}
+.leaf{position:absolute;inset:0;transform-origin:left center;transform-style:preserve-3d;backface-visibility:hidden;
+ transition:transform .9s cubic-bezier(.45,.05,.25,1);box-shadow:0 18px 50px rgba(0,0,0,.35);border-radius:3px;overflow:hidden;cursor:pointer;background:#0f2a47}
+.leaf canvas{display:block;width:100%;height:100%;pointer-events:none}
+.leaf .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.35),rgba(0,0,0,0) 40%);opacity:0;transition:opacity .9s;pointer-events:none}
+.leaf.flipped{transform:rotateY(-180deg)}
+.leaf.flipped .shade,.leaf.moving .shade{opacity:1}
+/* Enlaces del PDF, posicionados en % sobre cada página */
+.leaf a{position:absolute;display:block;border-radius:3px;cursor:pointer;transition:background .2s,box-shadow .2s}
+.leaf a:hover,.leaf a:focus-visible{background:color-mix(in srgb,var(--accent) 22%,transparent);box-shadow:0 0 0 1px var(--accent);outline:none}
+.controls{display:flex;align-items:center;gap:18px}
+button,.controls a{width:44px;height:44px;border-radius:50%;border:1px solid color-mix(in srgb,var(--ink) 25%,transparent);background:transparent;color:var(--ink);
+ display:grid;place-items:center;cursor:pointer;transition:background .2s,border-color .2s}
+button:hover:not(:disabled),.controls a:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);border-color:var(--accent)}
+button:focus-visible,.controls a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+button:disabled{opacity:.3;cursor:default}
+.count{font-size:14px;color:var(--muted);min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+.loading{position:absolute;inset:0;display:grid;place-items:center;font-size:14px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){.leaf,.leaf .shade{transition-duration:.01s}}
+</style>
+</head>
+<body>
+<div class="stage"><div class="book" id="book"><div class="loading" id="loading">Cargando brochure…</div></div></div>
+<div class="controls">
+ <button id="prev" aria-label="Página anterior" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+ <span class="count" id="count" aria-live="polite">– / –</span>
+ <button id="next" aria-label="Página siguiente" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button>
+ <a href="../Brochure_de_Servicios_2026.pdf" download aria-label="Descargar PDF" title="Descargar PDF"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg></a>
+</div>
+<script type="module">
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs";
+
+// Usa el mismo PDF que la versión principal: al reemplazarlo se actualizan las dos
+const URL_PDF="../Brochure_de_Servicios_2026.pdf";
+const ANCHO_RENDER=Math.min(2400,Math.round(1200*Math.max(1,devicePixelRatio||1)));
+
+const book=document.getElementById('book'),count=document.getElementById('count'),
+ prev=document.getElementById('prev'),next=document.getElementById('next');
+let leaves=[],n=0,cur=0;
+
+function z(){leaves.forEach((l,i)=>{if(!l.classList.contains('moving'))l.style.zIndex=i<cur?0:n-i})}
+function ui(){count.textContent=(cur+1)+' / '+n;prev.disabled=cur===0;next.disabled=cur===n-1}
+function go(d){
+ if(d>0&&cur<n-1){const l=leaves[cur];l.classList.add('moving');l.style.zIndex=n+1;l.classList.add('flipped');cur++;
+  setTimeout(()=>{l.classList.remove('moving');z()},900)}
+ else if(d<0&&cur>0){cur--;const l=leaves[cur];l.classList.add('moving');l.style.zIndex=n+1;
+  requestAnimationFrame(()=>l.classList.remove('flipped'));setTimeout(()=>{l.classList.remove('moving');z()},900)}
+ ui()}
+// Salta directo a una página (enlaces internos del PDF)
+function goTo(i){while(cur<i)go(1);while(cur>i)go(-1)}
+
+// Índice (0-based) de la página destino de un enlace interno
+async function destIndex(pdf,dest){
+ const d=typeof dest==='string'?await pdf.getDestination(dest):dest;
+ if(!d)return null;
+ return typeof d[0]==='object'?await pdf.getPageIndex(d[0]):d[0];
+}
+
+async function makeLeaf(pdf,num){
+ const page=await pdf.getPage(num);
+ const vp=page.getViewport({scale:ANCHO_RENDER/page.getViewport({scale:1}).width});
+ const leaf=document.createElement('div');leaf.className='leaf';
+ const canvas=document.createElement('canvas');canvas.width=Math.floor(vp.width);canvas.height=Math.floor(vp.height);
+ await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+ leaf.appendChild(canvas);
+ const shade=document.createElement('div');shade.className='shade';leaf.appendChild(shade);
+
+ // Recrear los enlaces del PDF como <a> sobre la página
+ for(const an of await page.getAnnotations()){
+  if(an.subtype!=='Link')continue;
+  const [x1,y1,x2,y2]=vp.convertToViewportRectangle(an.rect);
+  const a=document.createElement('a');
+  a.style.left=Math.min(x1,x2)/vp.width*100+'%';
+  a.style.top=Math.min(y1,y2)/vp.height*100+'%';
+  a.style.width=Math.abs(x2-x1)/vp.width*100+'%';
+  a.style.height=Math.abs(y2-y1)/vp.height*100+'%';
+  const url=an.url||an.unsafeUrl;
+  if(url){a.href=url;a.target='_blank';a.rel='noopener';a.title=url.replace(/^mailto:/,'')}
+  else if(an.dest){
+   const t=await destIndex(pdf,an.dest);if(t===null)continue;
+   a.href='#pagina-'+(t+1);a.title='Ir a la página '+(t+1);
+   a.addEventListener('click',e=>{e.preventDefault();goTo(t)});
+  }else continue;
+  a.addEventListener('click',e=>e.stopPropagation());
+  leaf.appendChild(a);
+ }
+ return {leaf,ratio:vp.width/vp.height};
+}
+
+async function init(){
+ const pdf=await pdfjsLib.getDocument(URL_PDF).promise;
+ const pages=[];
+ for(let i=1;i<=pdf.numPages;i++)pages.push(await makeLeaf(pdf,i));
+ document.documentElement.style.setProperty('--ratio',pages[0].ratio);
+ document.getElementById('loading').remove();
+ leaves=pages.map(p=>p.leaf);n=leaves.length;
+ leaves.forEach(l=>book.appendChild(l));
+ z();ui();
+ const h=parseInt((location.hash.match(/pagina-(\d+)/)||[])[1],10);
+ if(h)goTo(Math.min(h,n)-1);
+}
+
+prev.onclick=()=>go(-1);next.onclick=()=>go(1);
+book.addEventListener('click',e=>{if(!n)return;const r=e.currentTarget.getBoundingClientRect();go(e.clientX-r.left<r.width/3?-1:1)});
+addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='PageDown')go(1);if(e.key==='ArrowLeft'||e.key==='PageUp')go(-1)});
+let sx=null;addEventListener('touchstart',e=>sx=e.touches[0].clientX,{passive:true});
+addEventListener('touchend',e=>{if(sx===null)return;const dx=e.changedTouches[0].clientX-sx;if(Math.abs(dx)>40)go(dx<0?1:-1);sx=null});
+
+init().catch(err=>{console.error(err);document.getElementById('loading').textContent='No se pudo cargar el brochure.'});
+</script>
+</body>
+</html>
